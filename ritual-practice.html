@@ -710,10 +710,29 @@ function getRolesForCeremony() {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
 
+// Expand Masonic abbreviations so spoken full titles match abbreviated text
+const ABBREV_MAP = {
+  'wm': 'worshipful master', 'sw': 'senior warden', 'jw': 'junior warden',
+  'sd': 'senior deacon', 'jd': 'junior deacon', 'ig': 'inner guard',
+  'dc': 'director of ceremonies', 'sec': 'secretary', 'ipm': 'immediate past master',
+  'can': 'candidate', 'chap': 'chaplain', 'gl': 'grand lodge', 'pgl': 'provincial grand lodge',
+  'im': 'installed master', 'cb': 'courteous bow', 'sq': 'square',
+  "wm's": 'worshipful masters', "sw's": 'senior wardens', "jw's": 'junior wardens',
+  "sd's": 'senior deacons', "jd's": 'junior deacons',
+  "d's": 'deacons', "w's": 'wardens', "im's": 'installed masters',
+};
+
+function expandAbbrevs(str) {
+  return str.replace(/\b[\w']+\b/g, w => {
+    const lower = w.toLowerCase();
+    return ABBREV_MAP[lower] || w;
+  });
+}
+
 function similarity(a, b) {
   if (!a || !b) return 0;
-  a = a.replace(/[.,!?;:\'"\"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-  b = b.replace(/[.,!?;:\'"\"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  a = expandAbbrevs(a).replace(/[.,!?;:\'"\"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  b = expandAbbrevs(b).replace(/[.,!?;:\'"\"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
   if (a === b) return 1;
   const wa = a.split(' '), wb = b.split(' ');
   let matches = 0;
