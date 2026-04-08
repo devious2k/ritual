@@ -643,8 +643,71 @@ const CEREMONY_ICONS = {
 };
 
 // ─── STATE ───
+// ─── AUTH ───
+const PASS_HASH = 'd9d628292c7f805ecd12fa3e08807e8eeba9415901c2d6f38056fc5ce17d95b0'; // SHA-256 of passphrase
+
+async function hashPass(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function tryLogin() {
+  const input = document.getElementById('loginInput');
+  if (!input) return;
+  const hash = await hashPass(input.value.trim());
+  if (hash === PASS_HASH) {
+    S.authenticated = true;
+    S.screen = 'welcome';
+    sessionStorage.setItem('ritual-auth', 'true');
+    render();
+    setTimeout(() => { S.screen = 'select-ceremony'; render(); }, 2000);
+  } else {
+    const err = document.getElementById('loginError');
+    if (err) { err.textContent = 'Incorrect passphrase'; err.style.display = 'block'; }
+    input.value = '';
+    input.focus();
+  }
+}
+
+function renderLogin() {
+  return `<div class="card pillared" style="text-align:center;padding:40px 24px;margin-top:20px;">
+    <svg viewBox="0 0 200 200" width="80" height="80" style="opacity:0.7;margin-bottom:16px;filter:drop-shadow(0 0 12px rgba(212,175,55,0.3));">
+      <defs><linearGradient id="gold-grad-login" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e8c84a"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a0842e"/></linearGradient></defs>
+      <path d="M100 55 L145 100 L100 145 L55 100 Z" stroke="url(#gold-grad-login)" stroke-width="5" stroke-linejoin="miter" fill="none"/>
+      <path d="M100 28 L58 148" stroke="url(#gold-grad-login)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <path d="M100 28 L142 148" stroke="url(#gold-grad-login)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <circle cx="100" cy="28" r="7" fill="url(#gold-grad-login)"/><circle cx="100" cy="28" r="3.5" fill="#0d1b2a"/>
+      <text x="100" y="112" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="34" font-weight="600" fill="url(#gold-grad-login)">G</text>
+    </svg>
+    <div class="section-title" style="margin-bottom:4px;">Lodge Access</div>
+    <p style="font-size:13px;color:#7a8ba8;margin-bottom:20px;">Enter the lodge passphrase to continue</p>
+    <input type="password" id="loginInput" class="quiz-input" placeholder="Passphrase..."
+      style="text-align:center;min-height:auto;padding:14px;margin-bottom:8px;font-size:18px;letter-spacing:2px;"
+      onkeydown="if(event.key==='Enter')tryLogin()">
+    <div id="loginError" style="display:none;color:#e07050;font-size:13px;margin-bottom:8px;"></div>
+    <button class="btn btn-primary" onclick="tryLogin()" style="margin-top:8px;width:100%;">Enter Lodge</button>
+  </div>`;
+}
+
+function renderWelcome() {
+  return `<div class="card pillared" style="text-align:center;padding:50px 24px;margin-top:20px;animation:fadeIn .6s ease-out;">
+    <svg viewBox="0 0 200 200" width="70" height="70" style="opacity:0.8;margin-bottom:20px;filter:drop-shadow(0 0 16px rgba(212,175,55,0.4));">
+      <defs><linearGradient id="gold-grad-w" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e8c84a"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a0842e"/></linearGradient></defs>
+      <path d="M100 55 L145 100 L100 145 L55 100 Z" stroke="url(#gold-grad-w)" stroke-width="5" stroke-linejoin="miter" fill="none"/>
+      <path d="M100 28 L58 148" stroke="url(#gold-grad-w)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <path d="M100 28 L142 148" stroke="url(#gold-grad-w)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <circle cx="100" cy="28" r="7" fill="url(#gold-grad-w)"/><circle cx="100" cy="28" r="3.5" fill="#0d1b2a"/>
+      <text x="100" y="112" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="34" font-weight="600" fill="url(#gold-grad-w)">G</text>
+    </svg>
+    <div style="font-family:'Cormorant Garamond',serif;font-size:28px;color:#d4af37;font-weight:500;margin-bottom:8px;">Welcome, Brother</div>
+    <div class="masonic-divider"><div class="divider-line"></div><div class="divider-symbol">&#9670;</div><div class="divider-line"></div></div>
+    <p style="font-size:13px;color:#7a8ba8;">Entering the Lodge...</p>
+  </div>`;
+}
+
 let S = {
-  screen: 'select-ceremony', // select-ceremony, select-role, practice
+  authenticated: sessionStorage.getItem('ritual-auth') === 'true',
+  screen: sessionStorage.getItem('ritual-auth') === 'true' ? 'select-ceremony' : 'login',
   ceremony: null,
   role: null,
   mode: 'overview', // overview, script, cue, quiz, checklist
@@ -778,7 +841,9 @@ function render() {
     <div class="subtitle">${S.ceremony && S.role ? CEREMONY_ICONS[S.ceremony] + ' ' + S.ceremony + ' — ' + ROLE_NAMES[S.role] : 'Select your ceremony and role'}</div>
   </div>`;
 
-  if (S.screen === 'select-ceremony') h += renderSelectCeremony();
+  if (S.screen === 'login') h += renderLogin();
+  else if (S.screen === 'welcome') h += renderWelcome();
+  else if (S.screen === 'select-ceremony') h += renderSelectCeremony();
   else if (S.screen === 'select-role') h += renderSelectRole();
   else if (S.screen === 'practice') h += renderPractice();
 
