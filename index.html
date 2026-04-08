@@ -753,7 +753,6 @@ function render() {
 
   h += `<div class="header">
     <svg class="header-emblem" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <!-- Square & Compasses -->
       <defs>
         <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#e8c84a"/>
@@ -761,18 +760,17 @@ function render() {
           <stop offset="100%" stop-color="#a0842e"/>
         </linearGradient>
       </defs>
-      <!-- Compasses -->
-      <path d="M100 30 L60 160" stroke="url(#gold-grad)" stroke-width="6" stroke-linecap="round" fill="none"/>
-      <path d="M100 30 L140 160" stroke="url(#gold-grad)" stroke-width="6" stroke-linecap="round" fill="none"/>
-      <!-- Compass hinge -->
-      <circle cx="100" cy="30" r="7" fill="url(#gold-grad)"/>
-      <!-- Square -->
-      <path d="M55 95 L100 95 L100 150" stroke="url(#gold-grad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-      <!-- G -->
-      <text x="100" y="118" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="36" font-weight="600" fill="url(#gold-grad)">G</text>
-      <!-- All-Seeing Eye above -->
-      <ellipse cx="100" cy="12" rx="12" ry="6" stroke="url(#gold-grad)" stroke-width="1.5" fill="none" opacity="0.5"/>
-      <circle cx="100" cy="12" r="2.5" fill="#d4af37" opacity="0.5"/>
+      <!-- Square (behind compasses, rotated 45deg like a diamond) -->
+      <path d="M100 55 L145 100 L100 145 L55 100 Z" stroke="url(#gold-grad)" stroke-width="5" stroke-linejoin="miter" fill="none"/>
+      <!-- Compasses — left leg (over square top-left) -->
+      <path d="M100 28 L58 148" stroke="url(#gold-grad)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <!-- Compasses — right leg (over square top-right) -->
+      <path d="M100 28 L142 148" stroke="url(#gold-grad)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <!-- Compass hinge circle -->
+      <circle cx="100" cy="28" r="7" fill="url(#gold-grad)"/>
+      <circle cx="100" cy="28" r="3.5" fill="#0d1b2a"/>
+      <!-- G in centre -->
+      <text x="100" y="112" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="34" font-weight="600" fill="url(#gold-grad)">G</text>
     </svg>
     <div class="badge">Vulcan Lodge No. 4510</div>
     <h1>Ritual Practice</h1>
