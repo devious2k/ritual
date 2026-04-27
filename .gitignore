@@ -1,2 +1,33 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.preview
+
+# Build
+dist/
+.turbo/
+.vercel/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
 .wrangler/
+
+# Prisma
+packages/database/prisma/*.db
+
+# Logs
+*.log
+
+# Testing
+coverage/

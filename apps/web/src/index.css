@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Vulcan Lodge palette */
+    --vl-navy: #0B1A3A;
+    --vl-deep-blue: #12254A;
+    --vl-charcoal: #1E2D4A;
+    --vl-brass-gold: #C9A24A;
+    --vl-warm-gold: #D4AF37;
+    --vl-steel-grey: #7A8AA3;
+    --vl-off-white: #F0EDE4;
+    --vl-cream: #E8E2D4;
+    --vl-forge-orange: #D4752E;
+    --vl-ember: #B85C1A;
+
+    /* Semantic tokens — names retained from previous theme so existing pages keep working */
+    --bg-canvas: #0B1A3A;
+    --surface-soft: rgba(18, 37, 74, 0.78);
+    --surface-strong: rgba(30, 45, 74, 0.92);
+    --ink-strong: #F0EDE4;
+    --ink-muted: #B7C2D6;
+    --ink-faint: #7A8AA3;
+    --gold-soft: #C9A24A;
+    --gold-deep: #D4AF37;
+    --border-subtle: rgba(201, 162, 74, 0.18);
+    --border-strong: rgba(201, 162, 74, 0.42);
+  }
+
+  html {
+    background: var(--bg-canvas);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    color: var(--ink-strong);
+    background:
+      radial-gradient(circle at 50% 100%, rgba(212, 117, 46, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 20% 10%, rgba(201, 162, 74, 0.06), transparent 35%),
+      radial-gradient(circle at 80% 0%, rgba(18, 37, 74, 0.6), transparent 40%),
+      linear-gradient(180deg, #0B1A3A 0%, #0E1F42 50%, #0B1A3A 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .font-display {
+    font-family: 'Playfair Display', Georgia, serif;
+    letter-spacing: -0.015em;
+    color: var(--ink-strong);
+  }
+
+  ::selection {
+    background: rgba(201, 162, 74, 0.35);
+    color: var(--ink-strong);
+  }
+
+  /* Tighter eyebrow / label style used across the lodge UI */
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--vl-steel-grey);
+  }
+}
+
+@layer components {
+  .app-shell::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(201, 162, 74, 0.06), transparent 30%),
+      radial-gradient(circle at 80% 0%, rgba(212, 117, 46, 0.04), transparent 35%);
+    opacity: 0.9;
+  }
+}

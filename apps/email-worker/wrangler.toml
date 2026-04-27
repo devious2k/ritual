@@ -1,0 +1,14 @@
+name = "lodgekey-email-router"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# These are bound at runtime via `wrangler secret put`:
+#   API_URL              — e.g. https://api.freemasons.app
+#   INBOUND_MAIL_SECRET  — shared secret matching the API's env
+#
+# The Email Routing rule is configured in the Cloudflare dashboard (or via
+# the dash API) to route the freemasons.app catch-all to this worker.
+
+[vars]
+# Non-secret defaults can go here if needed.

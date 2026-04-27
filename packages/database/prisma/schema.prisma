@@ -1,0 +1,939 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ──────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  PROVINCE_ADMIN
+  WORSHIPFUL_MASTER
+  SECRETARY
+  TREASURER
+  DIRECTOR_OF_CEREMONIES
+  ALMONER
+  MENTOR
+  MEMBER
+}
+
+enum LodgeSiteMode {
+  PUBLIC_PAGE
+  LOGIN_DIRECT
+}
+
+enum DomainStatus {
+  NONE
+  PROVISIONING
+  PENDING_DNS
+  PENDING_VERIFICATION
+  ACTIVE
+  ERROR
+}
+
+enum MailDomainKind {
+  TENANT_SUBDOMAIN
+  CUSTOM_DOMAIN
+}
+
+enum MailDomainStatus {
+  PENDING
+  ACTIVE
+  ERROR
+}
+
+enum CeremonyDegree {
+  FIRST
+  SECOND
+  THIRD
+  INSTALLATION
+  MARK
+  HOLY_ROYAL_ARCH
+  OTHER
+}
+
+enum RsvpStatus {
+  PENDING
+  ATTENDING
+  ATTENDING_WITH_GUESTS
+  NOT_ATTENDING
+}
+
+enum InboundStatus {
+  RECEIVED
+  FORWARDED
+  ARCHIVED
+  REJECTED
+  ERROR
+}
+
+enum Degree {
+  ENTERED_APPRENTICE
+  FELLOW_CRAFT
+  MASTER_MASON
+}
+
+enum MemberStatus {
+  ACTIVE
+  SUSPENDED
+  EXCLUDED
+  RESIGNED
+  DECEASED
+  HONORARY
+  COUNTRY_MEMBER
+}
+
+enum MeetingType {
+  REGULAR
+  EMERGENCY
+  INSTALLATION
+  REHEARSAL
+  LODGE_OF_INSTRUCTION
+  COMMITTEE
+  SOCIAL
+}
+
+enum CandidateStatus {
+  ENQUIRY
+  INTERVIEW
+  PROPOSED
+  BALLOT_PENDING
+  BALLOT_APPROVED
+  BALLOT_REJECTED
+  INITIATED
+  WITHDRAWN
+}
+
+enum Office {
+  WORSHIPFUL_MASTER
+  IMMEDIATE_PAST_MASTER
+  SENIOR_WARDEN
+  JUNIOR_WARDEN
+  CHAPLAIN
+  TREASURER
+  SECRETARY
+  DIRECTOR_OF_CEREMONIES
+  ASSISTANT_DIRECTOR_OF_CEREMONIES
+  SENIOR_DEACON
+  JUNIOR_DEACON
+  ASSISTANT_SECRETARY
+  ALMONER
+  CHARITY_STEWARD
+  INNER_GUARD
+  TYLER
+  ORGANIST
+  SENIOR_STEWARD
+  STEWARD
+  MENTOR
+  MEMBERSHIP_OFFICER
+}
+
+enum PaymentType {
+  DUES
+  DINING
+  DONATION
+  EVENT
+  MERCHANDISE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum DuesStatus {
+  CURRENT
+  OVERDUE
+  ARREARS
+  WAIVED
+  HONORARY_EXEMPT
+}
+
+enum AccountType {
+  GENERAL
+  BENEVOLENT
+  SOCIAL
+  CHARITY
+  BUILDING
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum CorrespondenceType {
+  INCOMING
+  OUTGOING
+  PROVINCIAL
+  GRAND_LODGE
+  INTER_LODGE
+}
+
+enum HonourLevel {
+  PROVINCIAL
+  GRAND
+}
+
+enum AttendanceStatus {
+  PRESENT
+  APOLOGY
+  ABSENT
+  VISITOR
+}
+
+enum AlmonerCaseStatus {
+  OPEN
+  MONITORING
+  CLOSED
+  REFERRED
+}
+
+// ─── CORE MODELS ────────────────────────────────────────
+
+model Province {
+  id        String   @id @default(cuid())
+  name      String
+  number    String?
+  district  String?
+  settings  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lodges Lodge[]
+  users  User[]
+}
+
+model Lodge {
+  id                       String   @id @default(cuid())
+  name                     String
+  number                   String
+  consecrationDate         DateTime?
+  meetingDay               String?
+  meetingMonths            String?
+  venue                    String?
+  venueAddress             String?
+  tylerPhone               String?
+  diningCost               Float?
+  annualDues               Float?            // = annual subscription, charged at start of Masonic year
+  grandLodgeDues           Float?
+  provincialDues           Float?
+  joiningFee               Float?            // one-off fee paid by initiates / joiners
+  masonicYearStartMonth    Int      @default(4) // 4 = April. Used to roll new DuesRecord rows.
+  bankSortCode             String?           // surfaced on summons + treasurer panel
+  bankAccount              String?
+  bankAccountName          String?
+  bylawsUrl                String?
+  crestUrl                 String?
+  settings                 Json?
+  stripeAccountId          String?
+  stripeOnboardingComplete Boolean  @default(false)
+  xeroTenantId             String?
+  xeroLastSyncAt           DateTime?
+  isActive                 Boolean  @default(true)
+  slug                     String?  @unique
+  subdomain                String?  @unique
+  siteMode                 LodgeSiteMode @default(LOGIN_DIRECT)
+  domainStatus             DomainStatus  @default(NONE)
+  cloudflareRecordId       String?
+  domainProvisionedAt      DateTime?
+  domainError              String?
+  provinceId               String
+  province                 Province @relation(fields: [provinceId], references: [id])
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  members          Member[]
+  officers         Officer[]
+  meetings         Meeting[]
+  candidates       Candidate[]
+  accounts         Account[]
+  payments         Payment[]
+  duesRecords      DuesRecord[]
+  joiningFees      JoiningFeeRecord[]
+  equipment        LodgeEquipment[]
+  correspondence   Correspondence[]
+  userAccess       UserLodgeAccess[]
+  summonses        Summons[]
+  charityDonations CharityDonation[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  mailDomains      LodgeMailDomain[]
+  inboundMessages  InboundMessage[]
+  ritualBlocks     RitualBlock[]
+
+  @@unique([number, provinceId])
+}
+
+model LodgeMailDomain {
+  id                  String           @id @default(cuid())
+  lodgeId             String
+  lodge               Lodge            @relation(fields: [lodgeId], references: [id], onDelete: Cascade)
+  domain              String           @unique
+  kind                MailDomainKind   @default(TENANT_SUBDOMAIN)
+  status              MailDomainStatus @default(PENDING)
+  verificationToken   String?
+  cloudflareRecordIds Json?            // record ids created on the lodge's behalf
+  inboundError        String?
+  verifiedAt          DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  inboundMessages InboundMessage[]
+
+  @@index([lodgeId])
+}
+
+model InboundMessage {
+  id               String         @id @default(cuid())
+  lodgeId          String
+  lodge            Lodge          @relation(fields: [lodgeId], references: [id], onDelete: Cascade)
+  domainId         String?
+  domain           LodgeMailDomain? @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  fromEmail        String
+  fromName         String?
+  toEmail          String
+  recipientLocal   String
+  mappedOffice     Office?
+  deliveredToUserId String?
+  subject          String
+  bodyText         String?
+  bodyHtmlExcerpt  String?         // first ~10kB only — full HTML lives in object storage if/when we add it
+  messageId        String?         // RFC822 Message-ID
+  spfPass          Boolean         @default(false)
+  dkimPass         Boolean         @default(false)
+  status           InboundStatus   @default(RECEIVED)
+  forwardError     String?
+  receivedAt       DateTime        @default(now())
+
+  @@index([lodgeId, receivedAt])
+  @@index([deliveredToUserId, receivedAt])
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String
+  role        Role      @default(MEMBER)
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  memberId    String?   @unique
+  member      Member?   @relation(fields: [memberId], references: [id])
+  provinceId  String?
+  province    Province? @relation(fields: [provinceId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  lodgeAccess   UserLodgeAccess[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model UserLodgeAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lodgeId   String
+  lodge     Lodge    @relation(fields: [lodgeId], references: [id], onDelete: Cascade)
+  role      Role     @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, lodgeId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ─── MEMBERS & OFFICERS ─────────────────────────────────
+
+model Member {
+  id                  String       @id @default(cuid())
+  firstName           String
+  lastName            String
+  email               String?
+  phone               String?
+  address             String?
+  dateOfBirth         DateTime?
+  occupation          String?
+  photoUrl            String?
+  degree              Degree       @default(ENTERED_APPRENTICE)
+  status              MemberStatus @default(ACTIVE)
+  dateInitiated       DateTime?
+  datePassed          DateTime?
+  dateRaised          DateTime?
+  dateJoined          DateTime?
+  dateResigned        DateTime?
+  dateExcluded        DateTime?
+  previousLodge       String?
+  previousLodgeNumber String?
+  proposerId          String?
+  proposer            Member?      @relation("ProposerSeconder", fields: [proposerId], references: [id])
+  seconderId          String?
+  seconder            Member?      @relation("SeconderRelation", fields: [seconderId], references: [id])
+  proposed            Member[]     @relation("ProposerSeconder")
+  seconded            Member[]     @relation("SeconderRelation")
+  stripeCustomerId    String?
+  lodgeId             String
+  lodge               Lodge        @relation(fields: [lodgeId], references: [id])
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  user              User?
+  officers          Officer[]
+  attendance        Attendance[]
+  degreeProgressions DegreeProgression[]
+  duesRecords       DuesRecord[]
+  joiningFees       JoiningFeeRecord[]
+  diningFees        DiningFee[]
+  charityDonations  CharityDonation[]
+  honours           Honour[]
+  payments          Payment[]
+  almonerCases      AlmonerCase[]
+  mentorAssignments MentorAssignment[] @relation("MentorRelation")
+  menteeAssignments MentorAssignment[] @relation("MenteeRelation")
+  ceremonyRoles     CeremonyRole[]
+  ceremonyBlocks    CeremonyBlockAssignment[] @relation("CeremonyBlockMember")
+  diningRsvps       DiningRsvp[] @relation("DiningRsvpMember")
+
+  @@index([lodgeId])
+  @@index([status])
+  @@index([degree])
+}
+
+model Officer {
+  id            String    @id @default(cuid())
+  office        Office
+  year          Int
+  installedDate DateTime?
+  investedDate  DateTime?
+  isActive      Boolean   @default(true)
+  memberId      String
+  member        Member    @relation(fields: [memberId], references: [id])
+  lodgeId       String
+  lodge         Lodge     @relation(fields: [lodgeId], references: [id])
+  createdAt     DateTime  @default(now())
+
+  // Some offices (Steward) can have multiple holders simultaneously.
+  @@index([lodgeId, office, year])
+  @@index([lodgeId, year])
+}
+
+model Honour {
+  id            String      @id @default(cuid())
+  rank          String
+  fullTitle     String
+  level         HonourLevel
+  dateConferred DateTime?
+  dateGazetted  DateTime?
+  memberId      String
+  member        Member      @relation(fields: [memberId], references: [id])
+  createdAt     DateTime    @default(now())
+}
+
+// ─── MEETINGS & ATTENDANCE ──────────────────────────────
+
+model Meeting {
+  id                  String      @id @default(cuid())
+  type                MeetingType
+  date                DateTime
+  startTime           String?
+  venue               String?
+  diningTime          String?
+  diningCost          Float?
+  diningMenu          Json?
+  agendaItems         Json?
+  minutesContent      String?
+  minutesApproved     Boolean     @default(false)
+  minutesApprovedDate DateTime?
+  minutesDocFlowId    String?
+  ceremonyType        String?
+  candidateName       String?
+  lodgeId             String
+  lodge               Lodge       @relation(fields: [lodgeId], references: [id])
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  attendance   Attendance[]
+  visitors     Visitor[]
+  diningFees   DiningFee[]
+  diningRsvps  DiningRsvp[]
+  summons      Summons?
+  ceremonyPlan CeremonyPlan?
+
+  @@index([lodgeId, date])
+}
+
+model Attendance {
+  id            String           @id @default(cuid())
+  status        AttendanceStatus
+  diningChoice  String?
+  guestCount    Int              @default(0)
+  guestNames    String?
+  apologyReason String?
+  respondedAt   DateTime?
+  memberId      String
+  member        Member           @relation(fields: [memberId], references: [id])
+  meetingId     String
+  meeting       Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([memberId, meetingId])
+}
+
+model Visitor {
+  id           String   @id @default(cuid())
+  firstName    String
+  lastName     String
+  rank         String?
+  degree       Degree   @default(MASTER_MASON)
+  lodgeName    String
+  lodgeNumber  String?
+  provinceName String?
+  dining       Boolean  @default(false)
+  diningChoice String?
+  guestOf      String?
+  meetingId    String
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@index([meetingId])
+}
+
+// ─── CANDIDATES & DEGREES ───────────────────────────────
+
+model Candidate {
+  id               String          @id @default(cuid())
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  address          String?
+  dateOfBirth      DateTime?
+  occupation       String?
+  status           CandidateStatus @default(ENQUIRY)
+  proposerId       String?
+  seconderId       String?
+  proposalFormDate DateTime?
+  committeeDate    DateTime?
+  ballotDate       DateTime?
+  ballotResult     String?
+  initiationDate   DateTime?
+  memberId         String?
+  notes            String?
+  lodgeId          String
+  lodge            Lodge           @relation(fields: [lodgeId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([lodgeId, status])
+}
+
+model DegreeProgression {
+  id                String   @id @default(cuid())
+  degree            Degree
+  ceremonyDate      DateTime
+  conductedBy       String?
+  lodgeOfCeremony   String?
+  proficiencyPassed Boolean  @default(false)
+  proficiencyDate   DateTime?
+  notes             String?
+  memberId          String
+  member            Member   @relation(fields: [memberId], references: [id])
+  createdAt         DateTime @default(now())
+
+  @@unique([memberId, degree])
+}
+
+model MentorAssignment {
+  id            String    @id @default(cuid())
+  mentorId      String
+  mentor        Member    @relation("MentorRelation", fields: [mentorId], references: [id])
+  menteeId      String
+  mentee        Member    @relation("MenteeRelation", fields: [menteeId], references: [id])
+  assignedDate  DateTime  @default(now())
+  completedDate DateTime?
+  isActive      Boolean   @default(true)
+  notes         String?
+
+  @@unique([mentorId, menteeId])
+}
+
+// ─── CEREMONIES & RITUAL ────────────────────────────────
+
+model CeremonyPlan {
+  id                 String          @id @default(cuid())
+  ceremonyType       String
+  degree             CeremonyDegree?
+  candidateId        String?
+  allocations        Json
+  equipmentChecklist Json?
+  notes              String?
+  isConfirmed        Boolean         @default(false)
+  meetingId          String          @unique
+  meeting            Meeting         @relation(fields: [meetingId], references: [id])
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  roles            CeremonyRole[]
+  rehearsals       Rehearsal[]
+  blockAssignments CeremonyBlockAssignment[]
+}
+
+model RitualBlock {
+  id            String         @id @default(cuid())
+  // null = platform default. Per-lodge overrides scope to lodgeId.
+  lodgeId       String?
+  lodge         Lodge?         @relation(fields: [lodgeId], references: [id], onDelete: Cascade)
+  degree        CeremonyDegree
+  ceremonyType  String         // free-form for tenants ("Initiation", "Installation", custom workings)
+  title         String         // "Obligation", "North-East Corner Charge", "Working Tools"
+  description   String?
+  defaultOffice Office?        // sensible auto-assign target when officers are placed
+  orderHint     Int            @default(100) // ordering within the ceremony, lower = earlier
+
+  assignments CeremonyBlockAssignment[]
+
+  @@index([lodgeId, degree, orderHint])
+  @@index([degree, ceremonyType, orderHint])
+}
+
+model CeremonyBlockAssignment {
+  id                String       @id @default(cuid())
+  ceremonyPlanId    String
+  ceremonyPlan      CeremonyPlan @relation(fields: [ceremonyPlanId], references: [id], onDelete: Cascade)
+  ritualBlockId     String
+  ritualBlock       RitualBlock  @relation(fields: [ritualBlockId], references: [id])
+  assignedMemberId  String?
+  assignedMember    Member?      @relation("CeremonyBlockMember", fields: [assignedMemberId], references: [id])
+  orderIndex        Int          @default(0)
+  notes             String?
+  isOverride        Boolean      @default(false) // true when manually re-assigned away from default
+
+  @@unique([ceremonyPlanId, ritualBlockId])
+  @@index([ceremonyPlanId, orderIndex])
+}
+
+model CeremonyRole {
+  id             String       @id @default(cuid())
+  role           String
+  confirmed      Boolean      @default(false)
+  memberId       String
+  member         Member       @relation(fields: [memberId], references: [id])
+  ceremonyPlanId String
+  ceremonyPlan   CeremonyPlan @relation(fields: [ceremonyPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([ceremonyPlanId, role])
+}
+
+model Rehearsal {
+  id             String       @id @default(cuid())
+  date           DateTime
+  time           String?
+  venue          String?
+  notes          String?
+  attendees      Json?
+  ceremonyPlanId String
+  ceremonyPlan   CeremonyPlan @relation(fields: [ceremonyPlanId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+}
+
+// ─── FINANCE ────────────────────────────────────────────
+
+model Account {
+  id              String      @id @default(cuid())
+  name            String
+  type            AccountType
+  balance         Float       @default(0)
+  xeroAccountCode String?
+  lodgeId         String
+  lodge           Lodge       @relation(fields: [lodgeId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  transactions Transaction[]
+
+  @@unique([lodgeId, name])
+}
+
+model Transaction {
+  id             String          @id @default(cuid())
+  type           TransactionType
+  amount         Float
+  description    String
+  date           DateTime        @default(now())
+  reference      String?
+  xeroInvoiceId  String?
+  category       String?
+  accountId      String
+  account        Account         @relation(fields: [accountId], references: [id])
+  memberId       String?
+  paymentId      String?
+  createdAt      DateTime        @default(now())
+}
+
+model Payment {
+  id                      String        @id @default(cuid())
+  type                    PaymentType
+  status                  PaymentStatus @default(PENDING)
+  amount                  Float
+  currency                String        @default("gbp")
+  description             String?
+  stripePaymentIntentId   String?       @unique
+  stripeCheckoutSessionId String?
+  stripeInvoiceId         String?
+  stripeRefundId          String?
+  memberId                String?
+  member                  Member?       @relation(fields: [memberId], references: [id])
+  lodgeId                 String
+  lodge                   Lodge         @relation(fields: [lodgeId], references: [id])
+  paidAt                  DateTime?
+  refundedAt              DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@index([lodgeId, type])
+  @@index([stripePaymentIntentId])
+}
+
+model DuesRecord {
+  id                String     @id @default(cuid())
+  year              Int
+  amount            Float
+  grandLodgePortion Float?
+  provincialPortion Float?
+  lodgePortion      Float?
+  status            DuesStatus @default(CURRENT)
+  dueDate           DateTime?
+  paidDate          DateTime?
+  paidAmount        Float?
+  paymentMethod     String?
+  stripeInvoiceId   String?
+  instalmentPlan    Boolean    @default(false)
+  notes             String?
+  memberId          String
+  member            Member     @relation(fields: [memberId], references: [id])
+  lodgeId           String
+  lodge             Lodge      @relation(fields: [lodgeId], references: [id])
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@unique([memberId, lodgeId, year])
+  @@index([lodgeId, year])
+}
+
+// One-off joining fee, raised on initiation. Mirrors DuesRecord but lives
+// outside the annual cycle. Treasurer flags it overdue if dueDate < today
+// and no paidDate; the "must be paid 3 weeks before initiation" rule lives
+// in the API layer when reconciling against a Candidate's initiation date.
+model JoiningFeeRecord {
+  id            String     @id @default(cuid())
+  amount        Float
+  dueDate       DateTime?
+  paidDate      DateTime?
+  paidAmount    Float?
+  paymentMethod String?
+  notes         String?
+  memberId      String
+  member        Member     @relation(fields: [memberId], references: [id])
+  lodgeId       String
+  lodge         Lodge      @relation(fields: [lodgeId], references: [id])
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([memberId, lodgeId])
+  @@index([lodgeId])
+}
+
+model DiningRsvp {
+  id                  String     @id @default(cuid())
+  // Public token used in summons-email RSVP links; unique per (member, meeting).
+  token               String     @unique @default(cuid())
+  status              RsvpStatus @default(PENDING)
+  guestCount          Int        @default(0)
+  guestNames          String?
+  dietaryRequirements String?
+  notes               String?
+  respondedAt         DateTime?
+  // Optional payment fields — wired in later phase. Kept on this row so the
+  // RSVP and the dining fee remain a single coherent unit.
+  paymentStatus       String?    // 'PENDING' | 'PAID' | 'WAIVED'
+  amountDue           Float?
+  // Audit
+  remoteIp            String?
+  userAgent           String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  memberId  String
+  member    Member  @relation("DiningRsvpMember", fields: [memberId], references: [id], onDelete: Cascade)
+  meetingId String
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, meetingId])
+  @@index([meetingId, status])
+}
+
+model DiningFee {
+  id                      String        @id @default(cuid())
+  amount                  Float
+  guestAmount             Float?
+  guestCount              Int           @default(0)
+  status                  PaymentStatus @default(PENDING)
+  paidDate                DateTime?
+  paymentMethod           String?
+  stripeCheckoutSessionId String?
+  memberId                String
+  member                  Member        @relation(fields: [memberId], references: [id])
+  meetingId               String
+  meeting                 Meeting       @relation(fields: [meetingId], references: [id])
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@unique([memberId, meetingId])
+}
+
+model CharityDonation {
+  id                      String    @id @default(cuid())
+  amount                  Float
+  fund                    String
+  isFestival              Boolean   @default(false)
+  festivalTarget          Float?
+  giftAid                 Boolean   @default(false)
+  giftAidDeclarationDate  DateTime?
+  date                    DateTime  @default(now())
+  paymentMethod           String?
+  stripeCheckoutSessionId String?
+  notes                   String?
+  memberId                String?
+  member                  Member?   @relation(fields: [memberId], references: [id])
+  lodgeId                 String
+  lodge                   Lodge     @relation(fields: [lodgeId], references: [id])
+  createdAt               DateTime  @default(now())
+
+  @@index([lodgeId, fund])
+}
+
+// ─── COMMUNICATIONS ─────────────────────────────────────
+
+model Summons {
+  id             String    @id @default(cuid())
+  content        Json?
+  pdfUrl         String?
+  docFlowId      String?
+  generatedAt    DateTime?
+  sentAt         DateTime?
+  recipientCount Int?
+  rsvpDeadline   DateTime?
+  meetingId      String    @unique
+  meeting        Meeting   @relation(fields: [meetingId], references: [id])
+  lodgeId        String
+  lodge          Lodge     @relation(fields: [lodgeId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Correspondence {
+  id        String             @id @default(cuid())
+  type      CorrespondenceType
+  from      String
+  to        String
+  subject   String
+  body      String?
+  date      DateTime           @default(now())
+  docFlowId String?
+  isRead    Boolean            @default(false)
+  lodgeId   String
+  lodge     Lodge              @relation(fields: [lodgeId], references: [id])
+  createdAt DateTime           @default(now())
+}
+
+// ─── WELFARE ────────────────────────────────────────────
+
+model AlmonerCase {
+  id              String            @id @default(cuid())
+  status          AlmonerCaseStatus @default(OPEN)
+  encryptedNotes  String
+  category        String?
+  isConfidential  Boolean           @default(true)
+  openedDate      DateTime          @default(now())
+  closedDate      DateTime?
+  lastContactDate DateTime?
+  nextActionDate  DateTime?
+  nextAction      String?
+  memberId        String
+  member          Member            @relation(fields: [memberId], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([memberId])
+}
+
+// ─── EQUIPMENT ──────────────────────────────────────────
+
+model LodgeEquipment {
+  id              String    @id @default(cuid())
+  name            String
+  category        String
+  condition       String?
+  location        String?
+  lastCheckedDate DateTime?
+  notes           String?
+  photoUrl        String?
+  lodgeId         String
+  lodge           Lodge     @relation(fields: [lodgeId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ─── SYSTEM ─────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  body      String
+  link      String?
+  isRead    Boolean  @default(false)
+  emailSent Boolean  @default(false)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lodgeId   String?
+  lodge     Lodge?   @relation(fields: [lodgeId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  lodgeId   String?
+  lodge     Lodge?   @relation(fields: [lodgeId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([lodgeId, createdAt])
+  @@index([entity, entityId])
+}
