@@ -260,6 +260,7 @@ model Lodge {
   payments         Payment[]
   duesRecords      DuesRecord[]
   joiningFees      JoiningFeeRecord[]
+  paymentPlans     PaymentPlan[]
   equipment        LodgeEquipment[]
   correspondence   Correspondence[]
   userAccess       UserLodgeAccess[]
@@ -270,6 +271,8 @@ model Lodge {
   mailDomains      LodgeMailDomain[]
   inboundMessages  InboundMessage[]
   ritualBlocks     RitualBlock[]
+  subscribers      Subscriber[]
+  events           LodgeEvent[]
 
   @@unique([number, provinceId])
 }
@@ -337,6 +340,8 @@ model User {
   refreshTokens RefreshToken[]
   notifications Notification[]
   auditLogs     AuditLog[]
+  paymentPlansProposed PaymentPlan[] @relation("PaymentPlansProposed")
+  paymentPlansApproved PaymentPlan[] @relation("PaymentPlansApproved")
 }
 
 model UserLodgeAccess {
@@ -398,6 +403,7 @@ model Member {
   officers          Officer[]
   attendance        Attendance[]
   degreeProgressions DegreeProgression[]
+  subscriptionMode  String?            // 'LUMP_SUM' (default) | 'STANDING_ORDER' (12 monthly £17 payments)
   duesRecords       DuesRecord[]
   joiningFees       JoiningFeeRecord[]
   diningFees        DiningFee[]
@@ -498,22 +504,95 @@ model Attendance {
 }
 
 model Visitor {
-  id           String   @id @default(cuid())
-  firstName    String
-  lastName     String
-  rank         String?
-  degree       Degree   @default(MASTER_MASON)
-  lodgeName    String
-  lodgeNumber  String?
-  provinceName String?
-  dining       Boolean  @default(false)
-  diningChoice String?
-  guestOf      String?
-  meetingId    String
-  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now())
+  id            String   @id @default(cuid())
+  firstName     String
+  lastName      String
+  rank          String?
+  degree        Degree   @default(MASTER_MASON)
+  lodgeName     String
+  lodgeNumber   String?
+  provinceName  String?
+  email         String?
+  phone         String?
+  dining        Boolean  @default(false)
+  diningChoice  String?
+  dietary       String?
+  notes         String?
+  numGuests     Int      @default(0)
+  guestOf       String?
+  bookingSource String?  // 'PUBLIC_SITE' | 'INTERNAL' (null = legacy/unknown)
+  meetingId     String
+  meeting       Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
 
   @@index([meetingId])
+}
+
+// Mailing-list subscribers for event blasts. Members are auto-included via
+// their Member.email at send time, so this table only tracks non-members
+// (visitors who opt in, manually added contacts).
+model Subscriber {
+  id                String    @id @default(cuid())
+  email             String
+  firstName         String?
+  lastName          String?
+  source            String    // 'VISITOR_BOOKING' | 'EVENT_RSVP' | 'MANUAL'
+  unsubscribeToken  String    @unique @default(cuid())
+  subscribedAt      DateTime  @default(now())
+  unsubscribedAt    DateTime?
+  lodgeId           String
+  lodge             Lodge     @relation(fields: [lodgeId], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([lodgeId, email])
+  @@index([lodgeId])
+}
+
+// Public events (festive board, ladies' night, charity quiz, open lodge
+// nights, etc.) — distinct from regular Meeting business. Surfaced on
+// vulcan4510.com via the public calendar widget and advertised through
+// Sendoff blasts to members + subscribers.
+model LodgeEvent {
+  id            String         @id @default(cuid())
+  title         String
+  description   String?
+  date          DateTime
+  startTime     String?        // free-text "7:00pm"
+  endTime       String?
+  venue         String?
+  venueAddress  String?
+  ticketPrice   Float?
+  capacity      Int?
+  allowsGuests  Boolean        @default(true)
+  isPublished   Boolean        @default(false)
+  imageUrl      String?
+  sentAdvertAt  DateTime?      // null until the announcement blast goes out
+  lodgeId       String
+  lodge         Lodge          @relation(fields: [lodgeId], references: [id])
+  bookings      EventBooking[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([lodgeId, date])
+}
+
+model EventBooking {
+  id              String     @id @default(cuid())
+  eventId         String
+  event           LodgeEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  numGuests       Int        @default(0)
+  guestNames      String?
+  dietary         String?
+  notes           String?
+  subscribeToList Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+
+  @@index([eventId])
 }
 
 // ─── CANDIDATES & DEGREES ───────────────────────────────
@@ -539,6 +618,7 @@ model Candidate {
   notes            String?
   lodgeId          String
   lodge            Lodge           @relation(fields: [lodgeId], references: [id])
+  paymentPlans     PaymentPlan[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -734,8 +814,30 @@ model DuesRecord {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
+  instalments       SubsInstalment[]
+
   @@unique([memberId, lodgeId, year])
   @@index([lodgeId, year])
+}
+
+// Monthly tracking when a member is on STANDING_ORDER. Twelve rows per
+// DuesRecord (one per month of the Masonic year), each £17 for Vulcan.
+model SubsInstalment {
+  id             String     @id @default(cuid())
+  duesRecordId   String
+  duesRecord     DuesRecord @relation(fields: [duesRecordId], references: [id], onDelete: Cascade)
+  monthIndex     Int        // 1-12, where 1 = first month of the lodge's Masonic year (April for Vulcan)
+  dueDate        DateTime
+  expectedAmount Float
+  paidDate       DateTime?
+  paidAmount     Float?
+  paymentMethod  String?
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([duesRecordId, monthIndex])
+  @@index([dueDate])
 }
 
 // One-off joining fee, raised on initiation. Mirrors DuesRecord but lives
@@ -759,6 +861,71 @@ model JoiningFeeRecord {
 
   @@unique([memberId, lodgeId])
   @@index([lodgeId])
+}
+
+// Bespoke first-year payment plan for an initiate. Total = joining fee +
+// year-1 subscription (pro-rated to remaining months of the Masonic year),
+// spread across instalments according to the candidate's circumstances.
+// PROPOSED → APPROVED (treasurer review) → ACTIVE (email sent) →
+// COMPLETED (final instalment paid) | CANCELLED.
+model PaymentPlan {
+  id                     String                  @id @default(cuid())
+  candidateId            String
+  candidate              Candidate               @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  lodgeId                String
+  lodge                  Lodge                   @relation(fields: [lodgeId], references: [id])
+  joiningFeeAmount       Float
+  year1SubsAmount        Float
+  totalAmount            Float
+  monthsToSpread         Int
+  cadence                String                  // 'MONTHLY' | 'QUARTERLY' | 'LUMP' | 'CUSTOM'
+  lumpSumPortion         Float?
+  candidateCircumstances String?
+  notes                  String?
+  status                 PaymentPlanStatus       @default(PROPOSED)
+  proposedById           String?
+  proposedBy             User?                   @relation("PaymentPlansProposed", fields: [proposedById], references: [id])
+  approvedById           String?
+  approvedBy             User?                   @relation("PaymentPlansApproved", fields: [approvedById], references: [id])
+  proposedAt             DateTime                @default(now())
+  approvedAt             DateTime?
+  sentAt                 DateTime?
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  instalments            PaymentPlanInstalment[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  @@index([candidateId])
+  @@index([lodgeId, status])
+}
+
+enum PaymentPlanStatus {
+  PROPOSED
+  APPROVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model PaymentPlanInstalment {
+  id            String      @id @default(cuid())
+  planId        String
+  plan          PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  sequence      Int
+  label         String
+  dueDate       DateTime
+  amount        Float
+  isJoiningFee  Boolean     @default(false)
+  paidDate      DateTime?
+  paidAmount    Float?
+  paymentMethod String?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([planId, sequence])
+  @@index([dueDate])
 }
 
 model DiningRsvp {

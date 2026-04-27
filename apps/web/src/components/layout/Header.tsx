@@ -46,8 +46,8 @@ export default function Header() {
     : '?';
 
   return (
-    <header className="border-b border-[var(--border-subtle)] bg-[rgba(255,251,244,0.72)] px-4 backdrop-blur md:px-6">
-      <div className="mx-auto flex h-20 w-full max-w-7xl items-center gap-4">
+    <header className="border-b border-[var(--border-subtle)] bg-[rgba(255,251,244,0.72)] px-3 backdrop-blur sm:px-4 md:px-6">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 sm:h-20 sm:gap-4">
         <button
           onClick={toggleSidebar}
           className="rounded-xl border border-[var(--border-subtle)] bg-white/50 p-2 text-[var(--ink-muted)] hover:bg-white lg:hidden"
@@ -55,9 +55,9 @@ export default function Header() {
           <Menu size={20} />
         </button>
 
-        <div className="flex-1">
-          <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--ink-faint)]">LodgeKey</p>
-          <h1 className="font-display text-2xl text-[var(--ink-strong)]">{currentPage}</h1>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--ink-faint)] sm:text-[11px] sm:tracking-[0.28em]">LodgeKey</p>
+          <h1 className="truncate font-display text-lg text-[var(--ink-strong)] sm:text-2xl">{currentPage}</h1>
         </div>
 
         <div className="flex items-center gap-2">

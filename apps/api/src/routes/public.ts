@@ -3,6 +3,22 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 export async function publicRoutes(fastify: FastifyInstance) {
   const prisma = fastify.prisma;
 
+  // Streams a lodge crest from the inline data URL stored on Lodge.crestUrl.
+  // Used by transactional emails (Gmail, Outlook etc. strip data: URIs from
+  // <img src>, so emails reference this real HTTPS URL instead).
+  fastify.get('/_lodges/:lodgeId/crest', async (request, reply) => {
+    const { lodgeId } = request.params as { lodgeId: string };
+    const lodge = await prisma.lodge.findUnique({ where: { id: lodgeId }, select: { crestUrl: true } });
+    if (!lodge?.crestUrl) return reply.status(404).send({ error: 'No crest set' });
+    const m = lodge.crestUrl.match(/^data:image\/(png|jpe?g);base64,(.*)$/);
+    if (!m) return reply.status(404).send({ error: 'Crest not in expected format' });
+    const buf = Buffer.from(m[2], 'base64');
+    return reply
+      .header('Content-Type', m[1].startsWith('jp') ? 'image/jpeg' : 'image/png')
+      .header('Cache-Control', 'public, max-age=86400')
+      .send(buf);
+  });
+
   // Anonymous tenant lookup for subdomain bootstrap.
   fastify.get('/tenants/by-subdomain/:slug', async (request, reply) => {
     const { slug } = request.params as { slug: string };

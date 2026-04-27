@@ -16,6 +16,25 @@ function currentMasonicYearStart(now: Date, startMonth: number): Date {
   return new Date(Date.UTC(year, startMonth - 1, 1));
 }
 
+// Idempotently create 12 SubsInstalment rows (one per month) for a
+// STANDING_ORDER member. Each row carries the expected monthly amount
+// (annualDues / 12) and a due date stepping forward from the cycle start.
+async function ensureInstalmentsForRecord(
+  prisma: import('@prisma/client').PrismaClient,
+  duesRecordId: string,
+  cycleStart: Date,
+  annualDues: number,
+) {
+  const monthly = Math.round((annualDues / 12) * 100) / 100;
+  const rows: Array<{ duesRecordId: string; monthIndex: number; dueDate: Date; expectedAmount: number }> = [];
+  for (let m = 1; m <= 12; m++) {
+    const due = new Date(cycleStart);
+    due.setUTCMonth(due.getUTCMonth() + (m - 1));
+    rows.push({ duesRecordId, monthIndex: m, dueDate: due, expectedAmount: monthly });
+  }
+  await prisma.subsInstalment.createMany({ data: rows, skipDuplicates: true });
+}
+
 export async function treasurerRoutes(fastify: FastifyInstance) {
   const prisma = fastify.prisma;
 
@@ -36,12 +55,15 @@ export async function treasurerRoutes(fastify: FastifyInstance) {
     const members = await prisma.member.findMany({
       where: { lodgeId, status: { in: ['ACTIVE', 'HONORARY', 'COUNTRY_MEMBER'] } as any },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-      select: { id: true, firstName: true, lastName: true, status: true },
+      select: { id: true, firstName: true, lastName: true, status: true, subscriptionMode: true },
     });
 
     const dues = await prisma.duesRecord.findMany({
       where: { lodgeId, year: cycleYear },
-      include: { member: { select: { id: true, firstName: true, lastName: true } } },
+      include: {
+        member: { select: { id: true, firstName: true, lastName: true } },
+        instalments: { orderBy: { monthIndex: 'asc' } },
+      },
     });
     const duesByMember = new Map(dues.map((d) => [d.memberId, d]));
 
@@ -55,6 +77,19 @@ export async function treasurerRoutes(fastify: FastifyInstance) {
     // every active brother's current status without first running roll.)
     const dueRows = members.map((m) => {
       const rec = duesByMember.get(m.id);
+      const mode = (m.subscriptionMode ?? 'LUMP_SUM') as 'LUMP_SUM' | 'STANDING_ORDER';
+      const instalments = rec?.instalments ?? [];
+      const instalmentsPaidCount = instalments.filter((i) => i.paidDate).length;
+      const instalmentsTotal = instalments.length;
+      const instalmentsCollectedAmount = instalments.reduce((s, i) => s + (i.paidAmount ?? 0), 0);
+
+      // For STANDING_ORDER: collected = sum of instalments. For LUMP_SUM:
+      // collected = paidAmount on the parent record.
+      const collected = mode === 'STANDING_ORDER' ? instalmentsCollectedAmount : (rec?.paidAmount ?? 0);
+      const isFullyPaid = mode === 'STANDING_ORDER'
+        ? instalmentsTotal > 0 && instalmentsPaidCount === instalmentsTotal
+        : !!rec?.paidDate;
+
       return {
         memberId: m.id,
         memberName: `${m.firstName} ${m.lastName}`,
@@ -64,13 +99,26 @@ export async function treasurerRoutes(fastify: FastifyInstance) {
         dueDate: rec?.dueDate ?? cycleStart,
         paidDate: rec?.paidDate ?? null,
         paidAmount: rec?.paidAmount ?? null,
+        subscriptionMode: mode,
+        instalments: instalments.map((i) => ({
+          id: i.id,
+          monthIndex: i.monthIndex,
+          dueDate: i.dueDate,
+          expectedAmount: i.expectedAmount,
+          paidDate: i.paidDate,
+          paidAmount: i.paidAmount,
+        })),
+        instalmentsPaidCount,
+        instalmentsTotal,
+        collected,
+        isFullyPaid,
       };
     });
 
     const subsCharged = dueRows.reduce((s, r) => s + (r.amount ?? 0), 0);
-    const subsCollected = dueRows.reduce((s, r) => s + (r.paidAmount ?? 0), 0);
+    const subsCollected = dueRows.reduce((s, r) => s + r.collected, 0);
     const subsOutstanding = subsCharged - subsCollected;
-    const subsCollectedCount = dueRows.filter((r) => r.paidDate).length;
+    const subsCollectedCount = dueRows.filter((r) => r.isFullyPaid).length;
 
     const joiningCharged = joiningFees.reduce((s, j) => s + j.amount, 0);
     const joiningCollected = joiningFees.reduce((s, j) => s + (j.paidAmount ?? 0), 0);
@@ -150,7 +198,77 @@ export async function treasurerRoutes(fastify: FastifyInstance) {
       skipDuplicates: true,
     });
 
+    // Seed monthly instalments for any STANDING_ORDER members. £204/12 = £17.
+    const standingOrderMembers = await prisma.member.findMany({
+      where: { lodgeId, subscriptionMode: 'STANDING_ORDER', status: { in: ['ACTIVE', 'HONORARY', 'COUNTRY_MEMBER'] } as any },
+      select: { id: true },
+    });
+    for (const m of standingOrderMembers) {
+      const rec = await prisma.duesRecord.findUnique({
+        where: { memberId_lodgeId_year: { memberId: m.id, lodgeId, year: cycleYear } },
+      });
+      if (rec) await ensureInstalmentsForRecord(prisma, rec.id, cycleStart, lodge.annualDues!);
+    }
+
     return { rolled: created.count, year: cycleYear };
+  });
+
+  // PUT /treasurer/members/:memberId/subscription-mode
+  // Body { mode: 'LUMP_SUM' | 'STANDING_ORDER' }
+  // Switching to STANDING_ORDER also generates the 12 instalment rows for
+  // the current Masonic year if a DuesRecord exists.
+  fastify.put('/members/:memberId/subscription-mode', async (request, reply) => {
+    const { memberId } = request.params as { memberId: string };
+    const body = request.body as { mode: 'LUMP_SUM' | 'STANDING_ORDER' };
+    if (!['LUMP_SUM', 'STANDING_ORDER'].includes(body.mode)) {
+      return reply.status(400).send({ error: 'Invalid mode' });
+    }
+    const member = await prisma.member.findFirst({ where: { id: memberId, lodgeId: request.lodgeId! } });
+    if (!member) return reply.status(404).send({ error: 'Member not found' });
+
+    const updated = await prisma.member.update({
+      where: { id: memberId },
+      data: { subscriptionMode: body.mode },
+    });
+
+    // If switching to STANDING_ORDER, seed instalments for the current cycle.
+    if (body.mode === 'STANDING_ORDER') {
+      const lodge = await prisma.lodge.findUnique({ where: { id: request.lodgeId! } });
+      if (lodge?.annualDues) {
+        const startMonth = lodge.masonicYearStartMonth ?? 4;
+        const cycleStart = currentMasonicYearStart(new Date(), startMonth);
+        const cycleYear = cycleStart.getUTCFullYear();
+        const rec = await prisma.duesRecord.findUnique({
+          where: { memberId_lodgeId_year: { memberId, lodgeId: request.lodgeId!, year: cycleYear } },
+        });
+        if (rec) await ensureInstalmentsForRecord(prisma, rec.id, cycleStart, lodge.annualDues);
+      }
+    }
+
+    return updated;
+  });
+
+  // POST /treasurer/dues/:id/instalments/:instalmentId/mark-paid
+  fastify.post('/dues/:id/instalments/:instalmentId/mark-paid', async (request, reply) => {
+    const { id, instalmentId } = request.params as { id: string; instalmentId: string };
+    const body = request.body as { amount?: number; method?: string };
+    const rec = await prisma.duesRecord.findUnique({ where: { id }, include: { instalments: true } });
+    if (!rec || rec.lodgeId !== request.lodgeId) return reply.status(404).send({ error: 'Not found' });
+    const inst = rec.instalments.find((i) => i.id === instalmentId);
+    if (!inst) return reply.status(404).send({ error: 'Instalment not found' });
+
+    const updated = await prisma.subsInstalment.update({
+      where: { id: instalmentId },
+      data: { paidDate: new Date(), paidAmount: body.amount ?? inst.expectedAmount, paymentMethod: body.method },
+    });
+
+    // If all 12 are now paid, stamp the parent record as fully paid too.
+    const all = await prisma.subsInstalment.findMany({ where: { duesRecordId: id } });
+    if (all.length > 0 && all.every((i) => i.paidDate)) {
+      const total = all.reduce((s, i) => s + (i.paidAmount ?? 0), 0);
+      await prisma.duesRecord.update({ where: { id }, data: { paidDate: new Date(), paidAmount: total } });
+    }
+    return updated;
   });
 
   // POST /treasurer/dues/:id/mark-paid — record a payment. amount defaults to

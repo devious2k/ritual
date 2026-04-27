@@ -22,6 +22,7 @@ import TenantGate from './pages/TenantGate';
 import PublicRsvp from './pages/PublicRsvp';
 import Treasurer from './pages/Treasurer';
 import Incus from './pages/Incus';
+import Events from './pages/Events';
 import { isTenantSubdomain } from './lib/subdomain';
 import NotFound from './pages/NotFound';
 
@@ -69,6 +70,7 @@ export default function App() {
                 <Route path="/finance" element={<Treasurer />} />
                 <Route path="/treasurer" element={<Navigate to="/finance" replace />} />
                 <Route path="/incus" element={<Incus />} />
+                <Route path="/events" element={<Events />} />
                 <Route path="/dues" element={<Navigate to="/dining" replace />} />
                 <Route path="/charity" element={<Navigate to="/" replace />} />
                 <Route path="/almoner" element={<Navigate to="/" replace />} />

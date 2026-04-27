@@ -19,6 +19,7 @@ interface AgendaItem {
 }
 
 interface SummonsModel {
+  lodgeId: string;
   lodgeName: string;
   lodgeNumber: string;
   province: string;
@@ -117,6 +118,7 @@ export async function buildSummonsModel(prisma: PrismaClient, ctx: SummonsContex
   }));
 
   return {
+    lodgeId: meeting.lodge.id,
     lodgeName: meeting.lodge.name,
     lodgeNumber: meeting.lodge.number,
     province: meeting.lodge.province.name,
@@ -231,8 +233,9 @@ export function renderSummonsEmailHtml(
       <p style="margin:4px 0 0 0;font-size:13px;color:#0F2547;font-style:italic;">${escapeHtml(m.province)}</p>
     </div>
 
-    <!-- Lodge name -->
+    <!-- Lodge name + crest -->
     <div style="text-align:center;margin-bottom:18px;">
+      <img src="${process.env.API_BASE_URL || 'https://api.freemasons.app'}/public/_lodges/${escapeHtml(m.lodgeId)}/crest" alt="${escapeHtml(m.lodgeName)} crest" width="90" height="90" style="display:block;margin:0 auto 8px;border:0;" />
       <h1 style="font-family:'Playfair Display',Georgia,serif;font-size:38px;color:#0F2547;margin:0;letter-spacing:0.02em;font-style:italic;">${escapeHtml(m.lodgeName)}</h1>
       <p style="margin:4px 0 0 0;font-family:'Playfair Display',Georgia,serif;font-size:24px;color:#0F2547;font-style:italic;">No. ${escapeHtml(m.lodgeNumber)}</p>
     </div>

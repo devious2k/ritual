@@ -3,7 +3,6 @@ import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import LodgeSwitcher from './LodgeSwitcher';
 import {
-  Anvil,
   Building2,
   Calendar,
   ChevronsLeft,
@@ -12,6 +11,7 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Settings,
   Users,
   UtensilsCrossed,
@@ -30,8 +30,8 @@ const navItems: NavItem[] = [
   { label: 'Ceremonies', path: '/ceremonies', icon: <Landmark size={20} /> },
   { label: 'Dining', path: '/dining', icon: <UtensilsCrossed size={20} /> },
   { label: 'Members', path: '/members', icon: <Users size={20} /> },
+  { label: 'Events', path: '/events', icon: <Megaphone size={20} /> },
   { label: 'Treasurer', path: '/finance', icon: <Coins size={20} /> },
-  { label: 'Incus', path: '/incus', icon: <Anvil size={20} /> },
   { label: 'Lodges', path: '/lodges', icon: <Building2 size={20} />, roles: ['SUPER_ADMIN'] },
   { label: 'Settings', path: '/settings', icon: <Settings size={20} /> },
 ];

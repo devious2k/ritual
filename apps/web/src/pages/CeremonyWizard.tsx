@@ -117,13 +117,15 @@ export default function CeremonyWizard() {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <div className="flex items-center gap-3">
-        <Link to="/ceremonies" className="text-steel-grey hover:text-off-white"><ChevronLeft /></Link>
-        <div className="flex-1">
-          <p className="eyebrow mb-1">{new Date(ceremony.meeting.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-          <h1 className="text-3xl text-off-white">{ceremony.ceremonyType}</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex items-start gap-3">
+          <Link to="/ceremonies" className="text-steel-grey hover:text-off-white"><ChevronLeft /></Link>
+          <div className="flex-1 min-w-0">
+            <p className="eyebrow mb-1">{new Date(ceremony.meeting.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <h1 className="text-2xl sm:text-3xl text-off-white">{ceremony.ceremonyType}</h1>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:ml-auto">
           <span className={`rounded-md border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${
             ceremony.isConfirmed
               ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'

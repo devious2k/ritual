@@ -36,6 +36,10 @@ import { inboxRoutes } from './routes/inbox.js';
 import { ritualRoutes } from './routes/ritual.js';
 import { ritualSummonsRoutes } from './routes/ritualSummons.js';
 import { treasurerRoutes } from './routes/treasurer.js';
+import { paymentPlanRoutes } from './routes/paymentPlans.js';
+import { publicVulcanRoutes } from './routes/publicVulcan.js';
+import { eventRoutes } from './routes/events.js';
+import { widgetRoutes } from './routes/widget.js';
 import { publicRsvpRoutes } from './routes/publicRsvp.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -116,6 +120,10 @@ await fastify.register(inboundMailRoutes, { prefix: '/inbound-mail' });
 await fastify.register(ritualRoutes, { prefix: '/ritual' });
 await fastify.register(ritualSummonsRoutes, { prefix: '/ritual/summons' });
 await fastify.register(treasurerRoutes, { prefix: '/treasurer' });
+await fastify.register(paymentPlanRoutes, { prefix: '/payment-plans' });
+await fastify.register(publicVulcanRoutes, { prefix: '/public' });
+await fastify.register(eventRoutes, { prefix: '/events' });
+await fastify.register(widgetRoutes, { prefix: '/widget' });
 await fastify.register(publicRsvpRoutes, { prefix: '/public/rsvp' });
 
 // Health check

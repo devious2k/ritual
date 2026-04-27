@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useUIStore } from '@/stores/uiStore';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import IncusLauncher from '@/components/incus/IncusLauncher';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, sidebarCollapsed, darkMode } = useUIStore();
@@ -38,6 +39,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
+
+      <IncusLauncher />
     </div>
   );
 }

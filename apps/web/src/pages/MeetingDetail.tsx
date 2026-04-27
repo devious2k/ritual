@@ -236,7 +236,7 @@ export default function MeetingDetail() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         <MetricCard label="Present" value={presentCount} />
         <MetricCard label="Apologies" value={apologyCount} />
         <MetricCard label="Absent" value={absentCount} />
@@ -594,13 +594,13 @@ function SummonsAndRsvpSection({ meetingId }: { meetingId: string }) {
   const rsvps = data?.rsvps ?? [];
 
   return (
-    <section className="rounded-[30px] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-6">
-      <div className="mb-4 flex items-center justify-between">
+    <section className="rounded-[30px] border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-4 sm:p-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="eyebrow mb-1">Summons & dining</p>
-          <h2 className="font-display text-2xl text-[var(--ink-strong)]">Send summons / RSVPs</h2>
+          <h2 className="font-display text-xl sm:text-2xl text-[var(--ink-strong)]">Send summons / RSVPs</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <a
             href={`${api.defaults.baseURL}/ritual/summons/pdf/${meetingId}`}
             target="_blank"
@@ -759,9 +759,9 @@ function AgendaEditor({ meetingId, initial }: { meetingId: string; initial: Agen
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-[var(--ink-muted)]">Drag the handle to reorder. Items save when you press Save.</p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={addRow}
             className="inline-flex items-center gap-1.5 rounded-sm border border-brass-gold/40 bg-deep-blue/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-brass-gold transition-colors hover:border-brass-gold hover:bg-deep-blue"

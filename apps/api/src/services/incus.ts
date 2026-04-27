@@ -32,6 +32,8 @@ interface MemberContext {
   isSecretary: boolean;
   isDC: boolean;
   isWM: boolean;
+  isMembershipOfficer: boolean;
+  isSuperAdmin: boolean;
   lodgeId: string;
   lodgeName: string;
   lodgeNumber: string;
@@ -86,6 +88,36 @@ const TOOLS = [
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'find_candidate',
+      description: 'Look up a Candidate (prospective member) for this lodge by name. Returns id, status, and initiation date so a payment plan can be proposed.',
+      parameters: {
+        type: 'object',
+        properties: { name: { type: 'string', description: 'First name, last name, or both — partial match.' } },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'propose_payment_plan',
+      description: 'MEMBERSHIP OFFICER / TREASURER / WM ONLY. Propose a year-1 payment plan for a candidate based on their circumstances. The plan is created in PROPOSED status — the Treasurer must approve before any email is sent. Year-1 amount is the lodge\'s annual subscription pro-rated to the months remaining until the next Masonic year-start, plus the joining fee.',
+      parameters: {
+        type: 'object',
+        properties: {
+          candidateId: { type: 'string', description: 'Candidate id from find_candidate.' },
+          monthsToSpread: { type: 'integer', description: 'Number of months to spread the year-1 subscription over (1-12).' },
+          cadence: { type: 'string', enum: ['MONTHLY', 'QUARTERLY', 'LUMP'], description: 'Payment cadence. MONTHLY for instalments per month, QUARTERLY for four payments, LUMP for a single payment alongside the joining fee.' },
+          lumpSumPortion: { type: 'number', description: 'Optional: amount to pay up-front in addition to the joining fee, with the rest spread.' },
+          candidateCircumstances: { type: 'string', description: 'Free-text summary of why this plan suits this brother (e.g. "tight monthly budget, can do £40/month, no lump available").' },
+        },
+        required: ['candidateId', 'monthsToSpread', 'cadence'],
+      },
+    },
+  },
 ] as const;
 
 function systemPrompt(ctx: MemberContext): string {
@@ -105,6 +137,7 @@ function systemPrompt(ctx: MemberContext): string {
   if (ctx.isTreasurer) titles.push('Treasurer');
   if (ctx.isSecretary) titles.push('Secretary');
   if (ctx.isDC) titles.push('Director of Ceremonies');
+  if (ctx.isMembershipOfficer) titles.push('Membership Officer');
 
   return [
     `You are **Incus**, the AI mentor for ${ctx.lodgeName} No. ${ctx.lodgeNumber}.`,
@@ -132,6 +165,14 @@ function systemPrompt(ctx: MemberContext): string {
     '- `lookup_lodge_meetings` — public meeting calendar.',
     '- `lookup_lodge_officers` — current officer line.',
     '- `lookup_lodge_finance_summary` — total dues outstanding (Treasurer only).',
+    '- `find_candidate` — look up a Candidate by name.',
+    '- `propose_payment_plan` — Membership Officer / Treasurer / WM only. Drafts a year-1 plan (joining fee + pro-rated subs) for a candidate based on stated circumstances. Plan is saved as PROPOSED; the Treasurer must approve before any email is sent. Always read back the schedule in chat after calling this tool so the proposer can sanity-check it.',
+    '',
+    'PAYMENT PLAN GUIDANCE (when speaking with a Membership Officer / WM)',
+    '- Listen for the candidate\'s circumstances: monthly disposable income, lump-sum availability, partner approval, existing standing orders, irregular income.',
+    '- Suggest a sensible cadence: MONTHLY for tight budgets (typically 6-12 months), QUARTERLY when there\'s lumpier income, LUMP when they explicitly want it done in one go.',
+    '- The joining fee is fixed and must be paid 3 weeks before initiation — never propose a plan that violates this.',
+    '- After proposing, remind the proposer: "I\'ve saved it as PROPOSED. Head to /finance and click Approve & Send to email it to the brother."',
     '',
     `Today is ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`,
   ].filter(Boolean).join('\n');
@@ -141,6 +182,7 @@ async function executeTool(
   prisma: PrismaClient,
   ctx: MemberContext,
   name: string,
+  args: Record<string, unknown> = {},
 ): Promise<unknown> {
   switch (name) {
     case 'lookup_my_dues': {
@@ -223,7 +265,7 @@ async function executeTool(
     }
 
     case 'lookup_lodge_finance_summary': {
-      if (!ctx.isTreasurer && !ctx.isSecretary && !ctx.isWM) {
+      if (!ctx.isTreasurer && !ctx.isSecretary && !ctx.isWM && !ctx.isSuperAdmin) {
         return { error: 'Only the Treasurer, Secretary, or Worshipful Master may view lodge finance totals. Direct the brother to the Treasurer.' };
       }
       const lodge = await prisma.lodge.findUnique({ where: { id: ctx.lodgeId }, select: { masonicYearStartMonth: true } });
@@ -246,6 +288,56 @@ async function executeTool(
         joiningOutstanding: joiningCharged - joiningCollected,
         memberCount: dues.length,
       };
+    }
+
+    case 'find_candidate': {
+      const q = String(args.name ?? '').trim();
+      if (!q) return { error: 'name required' };
+      const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+      const candidates = await prisma.candidate.findMany({
+        where: { lodgeId: ctx.lodgeId },
+        select: { id: true, firstName: true, lastName: true, status: true, initiationDate: true, email: true, memberId: true },
+      });
+      const matches = candidates.filter((c) => {
+        const haystack = `${c.firstName} ${c.lastName} ${c.email ?? ''}`.toLowerCase();
+        return tokens.every((t) => haystack.includes(t));
+      });
+      return { matches: matches.slice(0, 8) };
+    }
+
+    case 'propose_payment_plan': {
+      if (!ctx.isMembershipOfficer && !ctx.isTreasurer && !ctx.isWM && !ctx.isSuperAdmin) {
+        return { error: 'Only the Membership Officer, Treasurer, or Worshipful Master may propose a payment plan.' };
+      }
+      const { proposePaymentPlan } = await import('./paymentPlan.js');
+      try {
+        const plan = await proposePaymentPlan(prisma, ctx.lodgeId, {
+          candidateId: String(args.candidateId),
+          monthsToSpread: Number(args.monthsToSpread),
+          cadence: String(args.cadence ?? 'MONTHLY') as any,
+          lumpSumPortion: args.lumpSumPortion != null ? Number(args.lumpSumPortion) : undefined,
+          candidateCircumstances: args.candidateCircumstances ? String(args.candidateCircumstances) : undefined,
+          proposedById: ctx.userId,
+        });
+        return {
+          ok: true,
+          planId: plan.id,
+          status: plan.status,
+          totalAmount: plan.totalAmount,
+          joiningFeeAmount: plan.joiningFeeAmount,
+          year1SubsAmount: plan.year1SubsAmount,
+          instalments: plan.instalments.map((i) => ({
+            sequence: i.sequence,
+            label: i.label,
+            dueDate: i.dueDate,
+            amount: i.amount,
+            isJoiningFee: i.isJoiningFee,
+          })),
+          nextStep: 'Plan saved as PROPOSED. The Treasurer will review on /finance and click Approve & Send to email it to the candidate.',
+        };
+      } catch (e: any) {
+        return { error: e.message };
+      }
     }
 
     default:
@@ -296,7 +388,9 @@ export async function chatWithIncus(
       messages.push({ role: 'assistant', content: msg.content ?? '', tool_calls: toolCalls });
       for (const tc of toolCalls) {
         calledTools.push(tc.function.name);
-        const result = await executeTool(prisma, ctx, tc.function.name);
+        let parsedArgs: Record<string, unknown> = {};
+        try { parsedArgs = JSON.parse(tc.function.arguments || '{}'); } catch { /* tolerated */ }
+        const result = await executeTool(prisma, ctx, tc.function.name, parsedArgs);
         messages.push({
           role: 'tool',
           tool_call_id: tc.id,
@@ -320,13 +414,13 @@ export async function buildMemberContext(
 ): Promise<MemberContext | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { member: { include: { honours: true, officerships: { where: { isActive: true } } } } },
+    include: { member: { include: { honours: true, officers: { where: { isActive: true } } } } },
   });
   if (!user || !user.member) return null;
   const lodge = await prisma.lodge.findUnique({ where: { id: lodgeId } });
   if (!lodge) return null;
 
-  const offices = user.member.officerships.map((o) => String(o.office));
+  const offices = user.member.officers.map((o) => String(o.office));
   const isPastMaster = user.member.honours.some((h) => h.fullTitle?.includes('Past Master'));
 
   return {
@@ -342,6 +436,8 @@ export async function buildMemberContext(
     isSecretary: offices.includes('SECRETARY') || offices.includes('ASSISTANT_SECRETARY'),
     isDC: offices.includes('DIRECTOR_OF_CEREMONIES') || offices.includes('ASSISTANT_DC'),
     isWM: offices.includes('WORSHIPFUL_MASTER'),
+    isMembershipOfficer: offices.includes('MEMBERSHIP_OFFICER'),
+    isSuperAdmin: user.role === 'SUPER_ADMIN',
     lodgeId,
     lodgeName: lodge.name,
     lodgeNumber: lodge.number,
