@@ -14,6 +14,21 @@ import { requireRole } from '../middleware/roleGuard.js';
 const CAN_VIEW = ['DIRECTOR_OF_CEREMONIES', 'WORSHIPFUL_MASTER', 'PROVINCE_ADMIN'] as const;
 const CAN_EDIT = ['DIRECTOR_OF_CEREMONIES', 'WORSHIPFUL_MASTER', 'PROVINCE_ADMIN'] as const;
 
+
+/**
+ * lodgeScope returns early for SUPER_ADMIN and PROVINCE_ADMIN, so it never sets
+ * request.lodgeId for them. Reads are fine — an undefined lodgeId simply widens
+ * the OR — but a write needs a real lodge. Fall back to the X-Lodge-Id header
+ * the web client already sends from the lodge switcher.
+ */
+function resolveLodgeId(request: FastifyRequest): string | undefined {
+  const scoped = (request as any).lodgeId as string | undefined;
+  if (scoped) return scoped;
+  const header = request.headers['x-lodge-id'];
+  const fromHeader = Array.isArray(header) ? header[0] : header;
+  return fromHeader || undefined;
+}
+
 export async function lectureRoutes(fastify: FastifyInstance) {
   // SUPER_ADMIN is allowed through requireRole unconditionally.
   const view = [authenticate, lodgeScope, requireRole(...CAN_VIEW)];
@@ -21,7 +36,7 @@ export async function lectureRoutes(fastify: FastifyInstance) {
 
   // GET / — the library this lodge can see: its own papers plus the platform set
   fastify.get('/', { preHandler: view }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
     const { category, minutes, status } = request.query as {
       category?: string;
       minutes?: string;
@@ -61,7 +76,7 @@ export async function lectureRoutes(fastify: FastifyInstance) {
   // GET /:id — one paper, with the script
   fastify.get('/:id', { preHandler: view }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
 
     const lecture = await fastify.prisma.lecture.findFirst({
       where: { id, OR: [{ lodgeId }, { lodgeId: null }] },
@@ -83,7 +98,10 @@ export async function lectureRoutes(fastify: FastifyInstance) {
 
   // POST / — add a paper to this lodge's own library
   fastify.post('/', { preHandler: edit }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
+    if (!lodgeId) {
+      return reply.status(400).send({ error: 'No lodge selected. Choose a lodge before recording or adding a paper.' });
+    }
     const body = request.body as Record<string, unknown>;
 
     if (!body.title || !body.summary || !body.category) {
@@ -127,7 +145,7 @@ export async function lectureRoutes(fastify: FastifyInstance) {
   // only a SUPER_ADMIN may touch those, and requireRole lets them past.
   fastify.patch('/:id', { preHandler: edit }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
     const body = request.body as Record<string, unknown>;
 
     const existing = await fastify.prisma.lecture.findUnique({ where: { id } });
@@ -156,7 +174,7 @@ export async function lectureRoutes(fastify: FastifyInstance) {
   // POST /:id/copy — take a platform paper into this lodge's library so it can be edited
   fastify.post('/:id/copy', { preHandler: edit }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
 
     const src = await fastify.prisma.lecture.findUnique({ where: { id } });
     if (!src) return reply.status(404).send({ error: 'Lecture not found' });
@@ -172,7 +190,7 @@ export async function lectureRoutes(fastify: FastifyInstance) {
   // DELETE /:id — only a lodge's own papers
   fastify.delete('/:id', { preHandler: edit }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
 
     const existing = await fastify.prisma.lecture.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Lecture not found' });
@@ -190,7 +208,10 @@ export async function lectureRoutes(fastify: FastifyInstance) {
 
   fastify.post('/:id/deliveries', { preHandler: edit }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
+    if (!lodgeId) {
+      return reply.status(400).send({ error: 'No lodge selected. Choose a lodge before recording or adding a paper.' });
+    }
     const { date, memberId, meetingId, notes } = request.body as {
       date?: string;
       memberId?: string;
@@ -233,7 +254,7 @@ export async function lectureRoutes(fastify: FastifyInstance) {
 
   fastify.delete('/deliveries/:deliveryId', { preHandler: edit }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { deliveryId } = request.params as { deliveryId: string };
-    const lodgeId = (request as any).lodgeId;
+    const lodgeId = resolveLodgeId(request);
 
     const existing = await fastify.prisma.lectureDelivery.findFirst({
       where: { id: deliveryId, lodgeId },
