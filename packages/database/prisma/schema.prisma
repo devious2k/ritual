@@ -21,6 +21,21 @@ enum Role {
   MEMBER
 }
 
+enum LectureCategory {
+  LORE
+  RITUAL
+  SYMBOLISM
+  RESPONSIBILITIES
+  HISTORY
+}
+
+enum LectureStatus {
+  AVAILABLE
+  SCHEDULED
+  DELIVERED
+  RETIRED
+}
+
 enum LodgeSiteMode {
   PUBLIC_PAGE
   LOGIN_DIRECT
@@ -271,6 +286,8 @@ model Lodge {
   mailDomains      LodgeMailDomain[]
   inboundMessages  InboundMessage[]
   ritualBlocks     RitualBlock[]
+  lectures         Lecture[]
+  lectureDeliveries LectureDelivery[]
   subscribers      Subscriber[]
   events           LodgeEvent[]
 
@@ -420,6 +437,7 @@ model Member {
   @@index([lodgeId])
   @@index([status])
   @@index([degree])
+  lectureDeliveries LectureDelivery[] @relation("LectureDeliveredBy")
 }
 
 model Officer {
@@ -483,6 +501,7 @@ model Meeting {
   ceremonyPlan CeremonyPlan?
 
   @@index([lodgeId, date])
+  lectureDeliveries LectureDelivery[]
 }
 
 model Attendance {
@@ -692,6 +711,68 @@ model RitualBlock {
 
   @@index([lodgeId, degree, orderHint])
   @@index([degree, ceremonyType, orderHint])
+}
+
+// ─── LECTURES ───────────────────────────────────────────
+// A library of papers a lodge can deliver in open lodge. Visible only to the
+// Director of Ceremonies, the Worshipful Master and administrators — the DC
+// programmes the season from here, and the delivery log stops a paper being
+// given twice to the same brethren.
+
+model Lecture {
+  id          String          @id @default(cuid())
+  // null = platform library, offered to every lodge. Set for a lodge's own papers.
+  lodgeId     String?
+  lodge       Lodge?          @relation(fields: [lodgeId], references: [id], onDelete: Cascade)
+
+  slug        String
+  number      Int?            // position in a published series
+  series      String?         // e.g. "The Vulcan Papers"
+  title       String
+  subtitle    String?
+  category    LectureCategory
+  minutes     Int             @default(10)
+
+  summary     String
+  object      String?         // what to put on the table
+  takeaways   Json?           // string[]
+  spine       Json?           // [{ time, heading }]
+  sources     Json?           // string[]
+  scriptMd    String?         // the full speaking script, markdown
+  handoutUrl  String?         // printable handout
+
+  status      LectureStatus   @default(AVAILABLE)
+  notes       String?
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  deliveries  LectureDelivery[]
+
+  @@unique([lodgeId, slug])
+  @@index([lodgeId, status])
+  @@index([category, minutes])
+}
+
+model LectureDelivery {
+  id          String    @id @default(cuid())
+  lectureId   String
+  lecture     Lecture   @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  lodgeId     String
+  lodge       Lodge     @relation(fields: [lodgeId], references: [id], onDelete: Cascade)
+
+  meetingId   String?
+  meeting     Meeting?  @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  memberId    String?   // the brother who gave it
+  member      Member?   @relation("LectureDeliveredBy", fields: [memberId], references: [id], onDelete: SetNull)
+
+  date        DateTime
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([lodgeId, date])
+  @@index([lectureId])
 }
 
 model CeremonyBlockAssignment {

@@ -9,6 +9,7 @@ import MemberProfile from './pages/MemberProfile';
 import Meetings from './pages/Meetings';
 import MeetingDetail from './pages/MeetingDetail';
 import Ceremonies from './pages/Ceremonies';
+import Lectures from './pages/Lectures';
 import CeremonyWizard from './pages/CeremonyWizard';
 import Dining from './pages/Dining';
 import Settings from './pages/Settings';
@@ -55,6 +56,7 @@ export default function App() {
                 <Route path="/meetings" element={<Meetings />} />
                 <Route path="/meetings/:id" element={<MeetingDetail />} />
                 <Route path="/ceremonies" element={<Ceremonies />} />
+                <Route path="/lectures" element={<Lectures />} />
                 <Route path="/ceremonies/:id/plan" element={<CeremonyWizard />} />
                 <Route path="/dining" element={<Dining />} />
                 <Route path="/member-area" element={<MemberArea />} />
