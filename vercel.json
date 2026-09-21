@@ -1,0 +1,9 @@
+{
+  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter @lodgekey/web build",
+  "installCommand": "echo skip",
+  "outputDirectory": "apps/web/dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

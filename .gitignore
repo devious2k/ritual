@@ -31,3 +31,4 @@ packages/database/prisma/*.db
 
 # Testing
 coverage/
+.vercel
