@@ -121,6 +121,9 @@ enum CandidateStatus {
   BALLOT_REJECTED
   INITIATED
   WITHDRAWN
+  PERSONALLY_RECOMMENDED
+  MET_MEMBERSHIP_OFFICER
+  MET_OTHER_MASONS
 }
 
 enum Office {
@@ -359,6 +362,11 @@ model User {
   auditLogs     AuditLog[]
   paymentPlansProposed PaymentPlan[] @relation("PaymentPlansProposed")
   paymentPlansApproved PaymentPlan[] @relation("PaymentPlansApproved")
+  mfaEnabled            Boolean   @default(false)
+  mfaSecret             String?
+  mfaBackupCodes        Json?
+  mfaConfirmedAt        DateTime?
+  authenticators        Authenticator[]
 }
 
 model UserLodgeAccess {
@@ -502,6 +510,7 @@ model Meeting {
 
   @@index([lodgeId, date])
   lectureDeliveries LectureDelivery[]
+  archivedAt            DateTime?
 }
 
 model Attendance {
@@ -642,6 +651,9 @@ model Candidate {
   updatedAt        DateTime        @updatedAt
 
   @@index([lodgeId, status])
+  recommendedBy         String?
+  source                String?
+  correspondence        CandidateCorrespondence[]
 }
 
 model DegreeProgression {
@@ -711,6 +723,43 @@ model RitualBlock {
 
   @@index([lodgeId, degree, orderHint])
   @@index([degree, ceremonyType, orderHint])
+}
+
+// ─── AUTHENTICATION ─────────────────────────────────────
+// Present in production since before this schema was last reconciled. Holds
+// live WebAuthn credentials — a db push that dropped this table would lock
+// every passkey user out permanently.
+
+model Authenticator {
+  id                  String    @id
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId        String    @unique
+  credentialPublicKey Bytes
+  counter             BigInt    @default(0)
+  transports          String?
+  deviceType          String?
+  backedUp            Boolean   @default(false)
+  nickname            String?
+  lastUsedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model CandidateCorrespondence {
+  id           String    @id
+  candidateId  String
+  candidate    Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  template     String
+  subject      String
+  sentToEmail  String
+  sentByUserId String?
+  sendoffId    String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  @@index([candidateId, createdAt])
 }
 
 // ─── LECTURES ───────────────────────────────────────────
